@@ -20,6 +20,7 @@ dependencies = [
 [project.scripts]
 projecthub-backend = "projecthub_backend:main"
 db-init = "projecthub_backend.cli.db_init:init_db"
+db-seed = "projecthub_backend.cli.seed:run_seed"
 
 [build-system]
 requires = ["uv_build>=0.13.9,<0.14.0"]
