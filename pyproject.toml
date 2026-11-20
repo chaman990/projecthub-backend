@@ -1,0 +1,26 @@
+[project]
+name = "projecthub-backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Chaman Soni", email = "55512349+chaman990@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.1",
+    "cryptography>=50.0.2",
+    "fastapi[standard]>=0.165.0",
+    "psycopg[binary]>=3.3.9",
+    "pymysql>=1.2.4",
+    "sqlalchemy>=2.1.9",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+projecthub-backend = "projecthub_backend:main"
+db-init = "projecthub_backend.cli.db_init:init_db"
+
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14.0"]
+build-backend = "uv_build"
