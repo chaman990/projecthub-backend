@@ -12,13 +12,16 @@ dependencies = [
     "cryptography>=50.0.2",
     "fastapi[standard]>=0.165.0",
     "psycopg[binary]>=3.3.9",
+    "pwdlib[argon2]",
+    "pydantic[email]",
+    "pyjwt",
     "pymysql>=1.2.4",
     "sqlalchemy>=2.1.9",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]
-projecthub-backend = "projecthub_backend:main"
+dev = "projecthub_backend.cli.dev:run_dev"
 db-init = "projecthub_backend.cli.db_init:init_db"
 db-seed = "projecthub_backend.cli.seed:run_seed"
 
