@@ -10,7 +10,7 @@ from projecthub_backend.core.security import decode_token
 from projecthub_backend.models.user import User
 
 # Tells FastAPI & Swagger UI to look for "Authorization: Bearer <token>"
-bearer_schema = HTTPBearer()
+bearer_schema = HTTPBearer(auto_error=False)
 
 
 def get_current_user(

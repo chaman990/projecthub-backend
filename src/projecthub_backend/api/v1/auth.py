@@ -2,14 +2,25 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from projecthub_backend.api.deps import get_current_user
 from projecthub_backend.core.config import settings
 from projecthub_backend.core.database import get_db
-from projecthub_backend.core.email import send_password_reset_email, send_verification_email
+from projecthub_backend.core.email import (
+    send_password_reset_email,
+    send_verification_email,
+)
 from projecthub_backend.core.security import (
     clear_auth_cookies,
     create_access_token,
@@ -69,7 +80,9 @@ def _issue_session_tokens(
     return access_token, raw_refresh, db_token
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 def register(
     payload: RegisterRequest,
     request: Request,
@@ -136,45 +149,67 @@ def refresh_tokens(
     payload: RefreshTokenRequest | None = None,
     db: Session = Depends(get_db),
 ) -> UserResponse:
-    raw_refresh = request.cookies.get("refresh_token") or (payload.refresh_token if payload else None)
+    raw_refresh = request.cookies.get("refresh_token") or (
+        payload.refresh_token if payload else None
+    )
     if not raw_refresh:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing"
+        )
 
     try:
         decoded = decode_token(raw_refresh)
         if decoded.get("type") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type"
+            )
         jti = uuid.UUID(decoded["jti"])
     except (jwt.PyJWTError, KeyError, ValueError):
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
 
     stored = db.scalar(select(RefreshToken).where(RefreshToken.jti == jti))
     if not stored or stored.token_hash != hash_token(raw_refresh):
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token not recognized")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not recognized",
+        )
 
     now = datetime.now(timezone.utc)
 
-    # Replay detection: revoke entire token family if an already-revoked token is reused
     if stored.revoked_at is not None:
         db.execute(
             update(RefreshToken)
-            .where(RefreshToken.family_id == stored.family_id, RefreshToken.revoked_at.is_(None))
+            .where(
+                RefreshToken.family_id == stored.family_id,
+                RefreshToken.revoked_at.is_(None),
+            )
             .values(revoked_at=now)
         )
         db.commit()
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token reuse detected; session revoked")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token reuse detected; session revoked",
+        )
 
     if stored.expires_at <= now:
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
+        )
 
     user = db.get(User, stored.user_id)
     if not user or not user.is_active:
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User inactive or not found",
+        )
 
     new_access, new_refresh, new_db_token = _issue_session_tokens(
         db, user, request, family_id=stored.family_id
@@ -194,7 +229,9 @@ def logout(
     payload: LogoutRequest | None = None,
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    raw_refresh = request.cookies.get("refresh_token") or (payload.refresh_token if payload else None)
+    raw_refresh = request.cookies.get("refresh_token") or (
+        payload.refresh_token if payload else None
+    )
     if raw_refresh:
         try:
             decoded = decode_token(raw_refresh)
@@ -219,7 +256,9 @@ def logout_all(
     now = datetime.now(timezone.utc)
     db.execute(
         update(RefreshToken)
-        .where(RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None))
+        .where(
+            RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None)
+        )
         .values(revoked_at=now)
     )
     db.commit()
@@ -255,18 +294,25 @@ def change_password(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     if not verify_password(payload.current_password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
 
     now = datetime.now(timezone.utc)
     current_user.password_hash = hash_password(payload.new_password)
     db.execute(
         update(RefreshToken)
-        .where(RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None))
+        .where(
+            RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None)
+        )
         .values(revoked_at=now)
     )
     db.commit()
     clear_auth_cookies(response)
-    return MessageResponse(message="Password updated successfully. Please log in again.")
+    return MessageResponse(
+        message="Password updated successfully. Please log in again."
+    )
 
 
 @router.post("/send-verification", response_model=MessageResponse)
@@ -276,7 +322,9 @@ def send_verification(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     if current_user.is_verified:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already verified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already verified"
+        )
 
     raw_token = generate_opaque_token()
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
@@ -290,3 +338,104 @@ def send_verification(
     )
     db.commit()
 
+    background_tasks.add_task(
+        send_verification_email, current_user.email, current_user.full_name, raw_token
+    )
+    return MessageResponse(
+        message="Verification email sent",
+        dev_token=raw_token if settings.DEBUG else None,
+    )
+
+
+@router.post("/verify-email", response_model=MessageResponse)
+def verify_email(
+    payload: VerifyEmailRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    now = datetime.now(timezone.utc)
+    record = db.scalar(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == hash_token(payload.token),
+            EmailVerificationToken.used_at.is_(None),
+            EmailVerificationToken.expires_at > now,
+        )
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    user = db.get(User, record.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    record.used_at = now
+    user.is_verified = True
+    db.commit()
+    return MessageResponse(message="Email verified successfully")
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    user = db.scalar(
+        select(User).where(
+            User.email == payload.email.lower(), User.is_active.is_(True)
+        )
+    )
+    raw_token: str | None = None
+    if user:
+        raw_token = generate_opaque_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    db.add(
+        PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_token(raw_token),
+            expires_at=expires_at,
+        )
+    )
+    db.commit()
+    background_tasks.add_task(
+        send_password_reset_email, user.email, user.full_name, raw_token
+    )
+    return MessageResponse(
+        message="If that email exists, a password reset link has been sent",
+        dev_token=raw_token if settings.DEBUG else None,
+    )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(
+    payload: ResetPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    now = datetime.now(timezone.utc)
+    record = db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == hash_token(payload.token),
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+    user = db.get(User, record.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    record.used_at = now
+    user.password_hash = hash_password(payload.new_password)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    db.commit()
+    return MessageResponse(message="Password reset successfully")
